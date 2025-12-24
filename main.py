@@ -132,12 +132,20 @@ while running:
                 if grid[y][x] == -1:
                     pygame.draw.rect(screen, (255, 0, 0), rect)
                     pygame.draw.circle(screen, (0, 0, 0), rect.center, 10)
+                    # Wrong flag: draw red X
+                    if flagged[y][x]:
+                        pygame.draw.line(screen, (255, 0, 0), (x*CELL_SIZE+5, y*CELL_SIZE+5), (x*CELL_SIZE+25, y*CELL_SIZE+25), 4)
+                        pygame.draw.line(screen, (255, 0, 0), (x*CELL_SIZE+5, y*CELL_SIZE+25), (x*CELL_SIZE+25, y*CELL_SIZE+5), 4)
                 else:
                     pygame.draw.rect(screen, (180, 180, 180), rect)
                     if grid[y][x] > 0:
-                        color = [(0,0,0), (0,0,255), (0,128,0), (255,0,0), (128,0,128), (255,128,0), (0,255,255), (255,255,0), (128,128,128)][grid[y][x]-1]
-                        text = font.render(str(grid[y][x]), True, color)
+                        colors = [(0,0,0), (0,0,255), (0,128,0), (255,0,0), (128,0,128), (255,128,0), (0,255,255), (255,255,0), (128,128,128)]
+                        text = font.render(str(grid[y][x]), True, colors[grid[y][x]-1])
                         screen.blit(text, (x * CELL_SIZE + 10, y * CELL_SIZE + 5))
+                    # Correct flag on non-mine (only shown on win)
+                    if win and flagged[y][x]:
+                        pygame.draw.line(screen, (0, 255, 0), (x*CELL_SIZE+5, y*CELL_SIZE+5), (x*CELL_SIZE+25, y*CELL_SIZE+25), 4)
+                        pygame.draw.line(screen, (0, 255, 0), (x*CELL_SIZE+5, y*CELL_SIZE+25), (x*CELL_SIZE+25, y*CELL_SIZE+5), 4)
             else:
                 pygame.draw.rect(screen, (100, 100, 255), rect)
                 if flagged[y][x]:
