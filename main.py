@@ -73,6 +73,12 @@ def reveal(x, y):
                     continue
                 reveal(x + dx, y + dy)
 
+def reveal_all_mines():
+    for y in range(ROWS):
+        for x in range(COLS):
+            if grid[y][x] == -1:
+                revealed[y][x] = True
+
 def check_win():
     for y in range(ROWS):
         for x in range(COLS):
@@ -106,6 +112,7 @@ while running:
                                     grid[yy][xx] = count_adjacent(xx, yy)
                         first_click = False
                     if grid[y][x] == -1:
+                        reveal_all_mines()
                         game_over = True
                     else:
                         reveal(x, y)
