@@ -83,23 +83,27 @@ def reveal(x, y):
                     continue
                 reveal(x + dx, y + dy)
 
-def get_unrevealed_unflagged_cells():
-    return [(x, y) for y in range(ROWS) for x in range(COLS) if not revealed[y][x] and not flagged[y][x]]
+def get_movable_mines():
+    return [(x, y) for y in range(ROWS) for x in range(COLS) if grid[y][x] == -1 and not flagged[y][x]]
+
+def get_safe_targets():
+    return [(x, y) for y in range(ROWS) for x in range(COLS) if grid[y][x] != -1 and not revealed[y][x] and not flagged[y][x]]
 
 def move_mines():
-    safe_cells = get_unrevealed_unflagged_cells()
-    if len(safe_cells) < MINES:
+    movable = get_movable_mines()
+    if not movable:
         return
-    # Clear all mines
-    for y in range(ROWS):
-        for x in range(COLS):
-            if grid[y][x] == -1:
-                grid[y][x] = 0
-    # Place mines only in safe cells
-    random.shuffle(safe_cells)
-    for i in range(MINES):
-        ux, uy = safe_cells[i]
-        grid[uy][ux] = -1
+    targets = get_safe_targets()
+    if len(targets) < len(movable):
+        return
+    # Clear movable mines
+    for mx, my in movable:
+        grid[my][mx] = 0
+    # Place them in random safe targets
+    random.shuffle(targets)
+    for i, (mx, my) in enumerate(movable):
+        tx, ty = targets[i]
+        grid[ty][tx] = -1
     # Update all numbers
     for y in range(ROWS):
         for x in range(COLS):
