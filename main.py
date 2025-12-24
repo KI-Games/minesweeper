@@ -1,25 +1,44 @@
 import pygame
 import random
+import sys
 
 pygame.init()
 
-WIDTH, HEIGHT = 300, 400
 CELL_SIZE = 30
-COLS, ROWS = 10, 15
-MINES = 15
+EXTRA_HEIGHT = 100
 
-screen = pygame.display.set_mode((WIDTH, HEIGHT + 100))
+# Default values
+COLS, ROWS, MINES = 10, 10, 15
+
+# Parse command line arguments
+if len(sys.argv) == 4:
+    try:
+        COLS = int(sys.argv[1])
+        ROWS = int(sys.argv[2])
+        MINES = int(sys.argv[3])
+    except ValueError:
+        pass  # Use defaults if invalid
+
+WIDTH = COLS * CELL_SIZE
+HEIGHT = ROWS * CELL_SIZE + EXTRA_HEIGHT
+
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Minesweeper")
 
 clock = pygame.time.Clock()
 font = pygame.font.SysFont(None, 40)
+button_font = pygame.font.SysFont(None, 30)
 
-grid = [[0 for _ in range(COLS)] for _ in range(ROWS)]
-revealed = [[False] * COLS for _ in range(ROWS)]
-flagged = [[False] * COLS for _ in range(ROWS)]
-first_click = True
-game_over = False
-win = False
+def reset_game():
+    global grid, revealed, flagged, first_click, game_over, win
+    grid = [[0 for _ in range(COLS)] for _ in range(ROWS)]
+    revealed = [[False] * COLS for _ in range(ROWS)]
+    flagged = [[False] * COLS for _ in range(ROWS)]
+    first_click = True
+    game_over = False
+    win = False
+
+reset_game()
 
 def place_mines(exclude_x, exclude_y):
     mines = 0
@@ -66,31 +85,36 @@ while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
-        if event.type == pygame.MOUSEBUTTONDOWN and not game_over:
+        if event.type == pygame.MOUSEBUTTONDOWN:
             mx, my = pygame.mouse.get_pos()
             x, y = mx // CELL_SIZE, my // CELL_SIZE
-            if y >= ROWS:
+            if y >= ROWS:  # Bottom area
+                if game_over:
+                    button_rect = pygame.Rect(WIDTH//2 - 100, HEIGHT - 70, 200, 40)
+                    if button_rect.collidepoint(mx, my):
+                        reset_game()
                 continue
-            if event.button == 1:  # Left click
-                if flagged[y][x]:
-                    continue
-                if first_click:
-                    place_mines(x, y)
-                    for yy in range(ROWS):
-                        for xx in range(COLS):
-                            if grid[yy][xx] != -1:
-                                grid[yy][xx] = count_adjacent(xx, yy)
-                    first_click = False
-                if grid[y][x] == -1:
-                    game_over = True
-                else:
-                    reveal(x, y)
-                    if check_win():
-                        win = True
+            if not game_over:
+                if event.button == 1:  # Left click
+                    if flagged[y][x]:
+                        continue
+                    if first_click:
+                        place_mines(x, y)
+                        for yy in range(ROWS):
+                            for xx in range(COLS):
+                                if grid[yy][xx] != -1:
+                                    grid[yy][xx] = count_adjacent(xx, yy)
+                        first_click = False
+                    if grid[y][x] == -1:
                         game_over = True
-            elif event.button == 3:  # Right click
-                if not revealed[y][x]:
-                    flagged[y][x] = not flagged[y][x]
+                    else:
+                        reveal(x, y)
+                        if check_win():
+                            win = True
+                            game_over = True
+                elif event.button == 3:  # Right click
+                    if not revealed[y][x]:
+                        flagged[y][x] = not flagged[y][x]
 
     screen.fill((200, 200, 200))
     
@@ -113,9 +137,16 @@ while running:
                     pygame.draw.polygon(screen, (255, 0, 0), [(x*CELL_SIZE+5, y*CELL_SIZE+10), (x*CELL_SIZE+15, y*CELL_SIZE+25), (x*CELL_SIZE+25, y*CELL_SIZE+10)])
             pygame.draw.rect(screen, (0, 0, 0), rect, 1)
 
-    status = "WIN!" if win else "BOOM!" if game_over and not win else ""
-    status_text = font.render(status, True, (255, 0, 0) if not win else (0, 255, 0))
-    screen.blit(status_text, (WIDTH//2 - status_text.get_width()//2, HEIGHT - 80))
+    if game_over:
+        status = "WIN!" if win else "BOOM!"
+        status_text = font.render(status, True, (255, 0, 0) if not win else (0, 255, 0))
+        screen.blit(status_text, (WIDTH//2 - status_text.get_width()//2, HEIGHT - 100))
+
+        # Play Again button
+        button_rect = pygame.Rect(WIDTH//2 - 100, HEIGHT - 70, 200, 40)
+        pygame.draw.rect(screen, (0, 255, 0), button_rect)
+        button_text = button_font.render("Play Again", True, (0, 0, 0))
+        screen.blit(button_text, (WIDTH//2 - button_text.get_width()//2, HEIGHT - 65))
 
     pygame.display.flip()
     clock.tick(60)
