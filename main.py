@@ -35,6 +35,7 @@ pygame.display.set_caption(title)
 clock = pygame.time.Clock()
 font = pygame.font.SysFont(None, 40)
 button_font = pygame.font.SysFont(None, 30)
+small_font = pygame.font.SysFont(None, 28)
 
 click_count = 0
 
@@ -87,7 +88,7 @@ def get_movable_mines():
     return [(x, y) for y in range(ROWS) for x in range(COLS) if grid[y][x] == -1 and not flagged[y][x]]
 
 def get_safe_targets():
-    return [(x, y) for y in range(ROWS) for x in range(COLS) if grid[y][x] != -1 and not revealed[y][x] and not flagged[y][x]]
+    return [(x, y) for y in range(ROWS) for x in range(COLS) if not revealed[y][x] and not flagged[y][x] and grid[y][x] != -1]
 
 def move_mines():
     movable = get_movable_mines()
@@ -101,7 +102,7 @@ def move_mines():
         grid[my][mx] = 0
     # Place them in random safe targets
     random.shuffle(targets)
-    for i, (mx, my) in enumerate(movable):
+    for i in range(len(movable)):
         tx, ty = targets[i]
         grid[ty][tx] = -1
     # Update all numbers
@@ -122,6 +123,10 @@ def check_win():
             if grid[y][x] != -1 and not revealed[y][x]:
                 return False
     return True
+
+def get_remaining_mines():
+    flagged_count = sum(1 for y in range(ROWS) for x in range(COLS) if flagged[y][x])
+    return MINES - flagged_count
 
 running = True
 while running:
@@ -189,6 +194,18 @@ while running:
                 if flagged[y][x]:
                     pygame.draw.polygon(screen, (255, 0, 0), [(x*CELL_SIZE+5, y*CELL_SIZE+10), (x*CELL_SIZE+15, y*CELL_SIZE+25), (x*CELL_SIZE+25, y*CELL_SIZE+10)])
             pygame.draw.rect(screen, (0, 0, 0), rect, 1)
+
+    # Info display
+    remaining = get_remaining_mines() if not first_click else MINES
+    mines_text = small_font.render(f"Mines: {remaining}", True, (0, 0, 0))
+    screen.blit(mines_text, (10, ROWS * CELL_SIZE + 10))
+
+    if CRAZY_MODE and not first_click and not game_over:
+        clicks_until = 5 - (click_count % 5)
+        if clicks_until == 5:
+            clicks_until = 0
+        shift_text = small_font.render(f"Shift in: {clicks_until}", True, (0, 0, 0))
+        screen.blit(shift_text, (10, ROWS * CELL_SIZE + 40))
 
     if game_over:
         status = "WIN!" if win else "BOOM!"
