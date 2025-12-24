@@ -9,34 +9,44 @@ EXTRA_HEIGHT = 100
 
 # Default values
 COLS, ROWS, MINES = 10, 10, 15
+CRAZY_MODE = False
 
 # Parse command line arguments
-if len(sys.argv) == 4:
+if len(sys.argv) >= 4:
     try:
         COLS = int(sys.argv[1])
         ROWS = int(sys.argv[2])
         MINES = int(sys.argv[3])
+        if len(sys.argv) >= 5 and sys.argv[4].lower() in ['1', 'true', 'crazy']:
+            CRAZY_MODE = True
     except ValueError:
-        pass  # Use defaults if invalid
+        pass
 
 WIDTH = COLS * CELL_SIZE
 HEIGHT = ROWS * CELL_SIZE + EXTRA_HEIGHT
 
+title = "Minesweeper"
+if CRAZY_MODE:
+    title += " - Crazy"
+
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Minesweeper")
+pygame.display.set_caption(title)
 
 clock = pygame.time.Clock()
 font = pygame.font.SysFont(None, 40)
 button_font = pygame.font.SysFont(None, 30)
 
+click_count = 0
+
 def reset_game():
-    global grid, revealed, flagged, first_click, game_over, win
+    global grid, revealed, flagged, click_count, first_click, game_over, win
     grid = [[0 for _ in range(COLS)] for _ in range(ROWS)]
     revealed = [[False] * COLS for _ in range(ROWS)]
     flagged = [[False] * COLS for _ in range(ROWS)]
     first_click = True
     game_over = False
     win = False
+    click_count = 0
 
 reset_game()
 
@@ -73,6 +83,29 @@ def reveal(x, y):
                     continue
                 reveal(x + dx, y + dy)
 
+def get_unrevealed_unflagged_cells():
+    return [(x, y) for y in range(ROWS) for x in range(COLS) if not revealed[y][x] and not flagged[y][x]]
+
+def move_mines():
+    safe_cells = get_unrevealed_unflagged_cells()
+    if len(safe_cells) < MINES:
+        return
+    # Clear all mines
+    for y in range(ROWS):
+        for x in range(COLS):
+            if grid[y][x] == -1:
+                grid[y][x] = 0
+    # Place mines only in safe cells
+    random.shuffle(safe_cells)
+    for i in range(MINES):
+        ux, uy = safe_cells[i]
+        grid[uy][ux] = -1
+    # Update all numbers
+    for y in range(ROWS):
+        for x in range(COLS):
+            if grid[y][x] != -1:
+                grid[y][x] = count_adjacent(x, y)
+
 def reveal_all_mines():
     for y in range(ROWS):
         for x in range(COLS):
@@ -94,7 +127,7 @@ while running:
         if event.type == pygame.MOUSEBUTTONDOWN:
             mx, my = pygame.mouse.get_pos()
             x, y = mx // CELL_SIZE, my // CELL_SIZE
-            if y >= ROWS:  # Bottom area
+            if y >= ROWS:
                 if game_over:
                     button_rect = pygame.Rect(WIDTH//2 - 100, HEIGHT - 70, 200, 40)
                     if button_rect.collidepoint(mx, my):
@@ -111,6 +144,7 @@ while running:
                                 if grid[yy][xx] != -1:
                                     grid[yy][xx] = count_adjacent(xx, yy)
                         first_click = False
+                    click_count += 1
                     if grid[y][x] == -1:
                         reveal_all_mines()
                         game_over = True
@@ -119,6 +153,8 @@ while running:
                         if check_win():
                             win = True
                             game_over = True
+                    if CRAZY_MODE and click_count % 5 == 0 and not game_over:
+                        move_mines()
                 elif event.button == 3:  # Right click
                     if not revealed[y][x]:
                         flagged[y][x] = not flagged[y][x]
@@ -132,7 +168,6 @@ while running:
                 if grid[y][x] == -1:
                     pygame.draw.rect(screen, (255, 0, 0), rect)
                     pygame.draw.circle(screen, (0, 0, 0), rect.center, 10)
-                    # Wrong flag: draw red X
                     if flagged[y][x]:
                         pygame.draw.line(screen, (255, 0, 0), (x*CELL_SIZE+5, y*CELL_SIZE+5), (x*CELL_SIZE+25, y*CELL_SIZE+25), 4)
                         pygame.draw.line(screen, (255, 0, 0), (x*CELL_SIZE+5, y*CELL_SIZE+25), (x*CELL_SIZE+25, y*CELL_SIZE+5), 4)
@@ -142,7 +177,6 @@ while running:
                         colors = [(0,0,0), (0,0,255), (0,128,0), (255,0,0), (128,0,128), (255,128,0), (0,255,255), (255,255,0), (128,128,128)]
                         text = font.render(str(grid[y][x]), True, colors[grid[y][x]-1])
                         screen.blit(text, (x * CELL_SIZE + 10, y * CELL_SIZE + 5))
-                    # Correct flag on non-mine (only shown on win)
                     if win and flagged[y][x]:
                         pygame.draw.line(screen, (0, 255, 0), (x*CELL_SIZE+5, y*CELL_SIZE+5), (x*CELL_SIZE+25, y*CELL_SIZE+25), 4)
                         pygame.draw.line(screen, (0, 255, 0), (x*CELL_SIZE+5, y*CELL_SIZE+25), (x*CELL_SIZE+25, y*CELL_SIZE+5), 4)
@@ -157,7 +191,6 @@ while running:
         status_text = font.render(status, True, (255, 0, 0) if not win else (0, 255, 0))
         screen.blit(status_text, (WIDTH//2 - status_text.get_width()//2, HEIGHT - 100))
 
-        # Play Again button
         button_rect = pygame.Rect(WIDTH//2 - 100, HEIGHT - 70, 200, 40)
         pygame.draw.rect(screen, (0, 255, 0), button_rect)
         button_text = button_font.render("Play Again", True, (0, 0, 0))
