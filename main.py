@@ -11,6 +11,7 @@ EXTRA_HEIGHT = 100
 COLS, ROWS, MINES = 10, 10, 15
 TIME_LIMIT = 240  # seconds
 CRAZY_MODE = False
+LOCK_FLAGGED_MINES = True  # In crazy mode, flagged mines won't move (default setting)
 
 # Parse command line arguments
 if len(sys.argv) >= 4:
@@ -24,6 +25,15 @@ if len(sys.argv) >= 4:
             CRAZY_MODE = True
     except ValueError:
         pass
+
+# Validate mine count
+max_mines = COLS * ROWS - 1  # Need at least one safe cell
+if MINES > max_mines:
+    print(f"Warning: Too many mines ({MINES}). Setting to maximum ({max_mines})")
+    MINES = max_mines
+if MINES < 1:
+    print(f"Warning: Invalid mine count ({MINES}). Setting to 1")
+    MINES = 1
 
 WIDTH = COLS * CELL_SIZE
 HEIGHT = ROWS * CELL_SIZE + EXTRA_HEIGHT
@@ -39,6 +49,11 @@ click_count = 0
 start_time = None
 next_crazy_enabled = CRAZY_MODE
 crazy_enabled = CRAZY_MODE
+next_lock_flagged_mines = LOCK_FLAGGED_MINES
+lock_flagged_mines = LOCK_FLAGGED_MINES
+
+# Color array for numbers 1-8 (move outside render loop for efficiency)
+NUMBER_COLORS = [(0,0,255), (0,128,0), (255,0,0), (128,0,128), (255,128,0), (0,255,255), (255,255,0), (128,128,128)]
 
 def update_title():
     base = "Minesweeper"
@@ -49,7 +64,7 @@ def update_title():
 update_title()
 
 def reset_game():
-    global grid, revealed, flagged, click_count, first_click, game_over, win, start_time, crazy_enabled
+    global grid, revealed, flagged, click_count, first_click, game_over, win, start_time, crazy_enabled, lock_flagged_mines, final_time
     grid = [[0 for _ in range(COLS)] for _ in range(ROWS)]
     revealed = [[False] * COLS for _ in range(ROWS)]
     flagged = [[False] * COLS for _ in range(ROWS)]
@@ -58,7 +73,9 @@ def reset_game():
     win = False
     click_count = 0
     start_time = None
+    final_time = 0
     crazy_enabled = next_crazy_enabled
+    lock_flagged_mines = next_lock_flagged_mines
     update_title()
 
 reset_game()
@@ -97,7 +114,10 @@ def reveal(x, y):
                 reveal(x + dx, y + dy)
 
 def get_movable_mines():
-    return [(x, y) for y in range(ROWS) for x in range(COLS) if grid[y][x] == -1 and not flagged[y][x]]
+    if lock_flagged_mines:
+        return [(x, y) for y in range(ROWS) for x in range(COLS) if grid[y][x] == -1 and not flagged[y][x]]
+    else:
+        return [(x, y) for y in range(ROWS) for x in range(COLS) if grid[y][x] == -1]
 
 def get_safe_targets():
     return [(x, y) for y in range(ROWS) for x in range(COLS) if not revealed[y][x] and not flagged[y][x] and grid[y][x] != -1]
@@ -150,9 +170,12 @@ while running:
                     replay_rect = pygame.Rect(WIDTH//2 - 100, HEIGHT - 70, 200, 40)
                     if replay_rect.collidepoint(mx, my):
                         reset_game()
-                    crazy_rect = pygame.Rect(WIDTH//2 - 100, HEIGHT - 25, 200, 30)
+                    crazy_rect = pygame.Rect(10, HEIGHT - 55, 200, 30)
                     if crazy_rect.collidepoint(mx, my):
                         next_crazy_enabled = not next_crazy_enabled
+                    lock_rect = pygame.Rect(10, HEIGHT - 25, 280, 30)
+                    if lock_rect.collidepoint(mx, my):
+                        next_lock_flagged_mines = not next_lock_flagged_mines
                 continue
             if not game_over:
                 if event.button == 1:
@@ -170,11 +193,13 @@ while running:
                     if grid[y][x] == -1:
                         reveal_all_mines()
                         game_over = True
+                        final_time = (pygame.time.get_ticks() - start_time) // 1000 if start_time else 0
                     else:
                         reveal(x, y)
                         if check_win():
                             win = True
                             game_over = True
+                            final_time = (pygame.time.get_ticks() - start_time) // 1000 if start_time else 0
                     if crazy_enabled and click_count % 5 == 0 and not game_over:
                         move_mines()
                 elif event.button == 3:
@@ -187,6 +212,7 @@ while running:
             reveal_all_mines()
             game_over = True
             win = False
+            final_time = TIME_LIMIT
 
     screen.fill((200, 200, 200))
     
@@ -206,8 +232,8 @@ while running:
                 else:
                     pygame.draw.rect(screen, (180, 180, 180), rect)
                     if grid[y][x] > 0:
-                        colors = [(0,0,0), (0,0,255), (0,128,0), (255,0,0), (128,0,128), (255,128,0), (0,255,255), (255,255,0), (128,128,128)]
-                        text = font.render(str(grid[y][x]), True, colors[grid[y][x]-1])
+                        color_index = min(grid[y][x] - 1, len(NUMBER_COLORS) - 1)
+                        text = font.render(str(grid[y][x]), True, NUMBER_COLORS[color_index])
                         screen.blit(text, (x * CELL_SIZE + 10, y * CELL_SIZE + 5))
             else:
                 pygame.draw.rect(screen, (100, 100, 255), rect)
@@ -233,26 +259,38 @@ while running:
         screen.blit(shift_text, (10, ROWS * CELL_SIZE + 40))
 
     if game_over:
-        elapsed = (pygame.time.get_ticks() - start_time) // 1000 if start_time else 0
-        status = "WIN!" if win else ("TIME UP!" if elapsed >= TIME_LIMIT else "BOOM!")
+        status = "WIN!" if win else ("TIME UP!" if final_time >= TIME_LIMIT else "BOOM!")
         status_text = font.render(status, True, (0, 255, 0) if win else (255, 0, 0))
-        screen.blit(status_text, (WIDTH//2 - status_text.get_width()//2, HEIGHT - 140))
+        screen.blit(status_text, (WIDTH//2 - status_text.get_width()//2, HEIGHT - 110))
 
         button_rect = pygame.Rect(WIDTH//2 - 100, HEIGHT - 70, 200, 40)
         pygame.draw.rect(screen, (0, 255, 0), button_rect)
         button_text = button_font.render("Play Again", True, (0, 0, 0))
         screen.blit(button_text, (WIDTH//2 - button_text.get_width()//2, HEIGHT - 65))
 
-        crazy_rect = pygame.Rect(WIDTH//2 - 100, HEIGHT - 25, 200, 30)
+        # Crazy Mode checkbox
+        crazy_rect = pygame.Rect(10, HEIGHT - 55, 200, 30)
         pygame.draw.rect(screen, (255, 255, 255), crazy_rect)
         pygame.draw.rect(screen, (0, 0, 0), crazy_rect, 2)
-        check_rect = pygame.Rect(WIDTH//2 - 90, HEIGHT - 20, 20, 20)
-        pygame.draw.rect(screen, (0, 0, 0), check_rect, 2)
+        crazy_check = pygame.Rect(15, HEIGHT - 50, 20, 20)
+        pygame.draw.rect(screen, (0, 0, 0), crazy_check, 2)
         if next_crazy_enabled:
-            pygame.draw.line(screen, (0, 0, 0), (WIDTH//2 - 90, HEIGHT - 20), (WIDTH//2 - 70, HEIGHT), 3)
-            pygame.draw.line(screen, (0, 0, 0), (WIDTH//2 - 90, HEIGHT), (WIDTH//2 - 70, HEIGHT - 20), 3)
+            pygame.draw.line(screen, (0, 0, 0), (crazy_check.left + 2, crazy_check.top + 2), (crazy_check.right - 2, crazy_check.bottom - 2), 3)
+            pygame.draw.line(screen, (0, 0, 0), (crazy_check.left + 2, crazy_check.bottom - 2), (crazy_check.right - 2, crazy_check.top + 2), 3)
         crazy_text = small_font.render("Crazy Mode", True, (0, 0, 0))
-        screen.blit(crazy_text, (WIDTH//2 - 70, HEIGHT - 22))
+        screen.blit(crazy_text, (40, HEIGHT - 52))
+
+        # Lock Flagged Mines checkbox
+        lock_rect = pygame.Rect(10, HEIGHT - 25, 280, 30)
+        pygame.draw.rect(screen, (255, 255, 255), lock_rect)
+        pygame.draw.rect(screen, (0, 0, 0), lock_rect, 2)
+        lock_check = pygame.Rect(15, HEIGHT - 20, 20, 20)
+        pygame.draw.rect(screen, (0, 0, 0), lock_check, 2)
+        if next_lock_flagged_mines:
+            pygame.draw.line(screen, (0, 0, 0), (lock_check.left + 2, lock_check.top + 2), (lock_check.right - 2, lock_check.bottom - 2), 3)
+            pygame.draw.line(screen, (0, 0, 0), (lock_check.left + 2, lock_check.bottom - 2), (lock_check.right - 2, lock_check.top + 2), 3)
+        lock_text = small_font.render("Lock Flagged Mines", True, (0, 0, 0))
+        screen.blit(lock_text, (40, HEIGHT - 22))
 
     pygame.display.flip()
     clock.tick(60)
