@@ -54,7 +54,7 @@ lock_flagged_mines = LOCK_FLAGGED_MINES
 pings_remaining = 3
 ping_active = False
 ping_start_time = 0
-PING_DURATION = 2000  # milliseconds
+PING_DURATION = 3000  # milliseconds
 
 # Color array for numbers 1-8 (move outside render loop for efficiency)
 NUMBER_COLORS = [(0,0,255), (0,128,0), (255,0,0), (128,0,128), (255,128,0), (0,255,255), (255,255,0), (128,128,128)]
