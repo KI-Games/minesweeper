@@ -144,12 +144,12 @@ while running:
     if game.game_over:
         status = "WIN!" if game.win else ("TIME UP!" if game.final_time >= TIME_LIMIT else "BOOM!")
         status_text = font.render(status, True, (0, 255, 0) if game.win else (255, 0, 0))
-        screen.blit(status_text, (WIDTH//2 - status_text.get_width()//2, HEIGHT - 110))
+        screen.blit(status_text, (WIDTH//2 - status_text.get_width()//2, HEIGHT - 98))
 
         button_rect = pygame.Rect(WIDTH//2 - 100, HEIGHT - 70, 200, 40)
         pygame.draw.rect(screen, (0, 255, 0), button_rect)
         button_text = button_font.render("Play Again", True, (0, 0, 0))
-        screen.blit(button_text, (WIDTH//2 - button_text.get_width()//2, HEIGHT - 65))
+        screen.blit(button_text, (WIDTH//2 - button_text.get_width()//2, HEIGHT - 60))
 
         # Crazy Mode checkbox
         crazy_rect = pygame.Rect(10, HEIGHT - 55, 200, 30)
