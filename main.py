@@ -1,6 +1,6 @@
 import pygame
-import random
 import sys
+from game import MinesweeperGame
 
 pygame.init()
 
@@ -26,15 +26,6 @@ if len(sys.argv) >= 4:
     except ValueError:
         pass
 
-# Validate mine count
-max_mines = COLS * ROWS - 1  # Need at least one safe cell
-if MINES > max_mines:
-    print(f"Warning: Too many mines ({MINES}). Setting to maximum ({max_mines})")
-    MINES = max_mines
-if MINES < 1:
-    print(f"Warning: Invalid mine count ({MINES}). Setting to 1")
-    MINES = 1
-
 WIDTH = COLS * CELL_SIZE
 HEIGHT = ROWS * CELL_SIZE + EXTRA_HEIGHT
 
@@ -45,123 +36,22 @@ font = pygame.font.SysFont(None, 40)
 button_font = pygame.font.SysFont(None, 30)
 small_font = pygame.font.SysFont(None, 28)
 
-click_count = 0
-start_time = None
 next_crazy_enabled = CRAZY_MODE
-crazy_enabled = CRAZY_MODE
 next_lock_flagged_mines = LOCK_FLAGGED_MINES
-lock_flagged_mines = LOCK_FLAGGED_MINES
-pings_remaining = 3
-ping_active = False
-ping_start_time = 0
 PING_DURATION = 3000  # milliseconds
 
-# Color array for numbers 1-8 (move outside render loop for efficiency)
+# Color array for numbers 1-8 
 NUMBER_COLORS = [(0,0,255), (0,128,0), (255,0,0), (128,0,128), (255,128,0), (0,255,255), (255,255,0), (128,128,128)]
 
 def update_title():
     base = "Minesweeper"
-    if crazy_enabled:
+    if game.crazy_mode:
         base += " - Crazy"
     pygame.display.set_caption(base)
 
+# Create game instance
+game = MinesweeperGame(COLS, ROWS, MINES, TIME_LIMIT, CRAZY_MODE, LOCK_FLAGGED_MINES)
 update_title()
-
-def reset_game():
-    global grid, revealed, flagged, click_count, first_click, game_over, win, start_time, crazy_enabled, lock_flagged_mines, final_time, pings_remaining, ping_active
-    grid = [[0 for _ in range(COLS)] for _ in range(ROWS)]
-    revealed = [[False] * COLS for _ in range(ROWS)]
-    flagged = [[False] * COLS for _ in range(ROWS)]
-    first_click = True
-    game_over = False
-    win = False
-    click_count = 0
-    start_time = None
-    final_time = 0
-    crazy_enabled = next_crazy_enabled
-    lock_flagged_mines = next_lock_flagged_mines
-    pings_remaining = 3
-    ping_active = False
-    update_title()
-
-reset_game()
-
-def place_mines(exclude_x, exclude_y):
-    mines = 0
-    while mines < MINES:
-        x = random.randint(0, COLS - 1)
-        y = random.randint(0, ROWS - 1)
-        if (x, y) != (exclude_x, exclude_y) and grid[y][x] != -1:
-            grid[y][x] = -1
-            mines += 1
-
-def count_adjacent(x, y):
-    if grid[y][x] == -1:
-        return -1
-    count = 0
-    for dy in [-1, 0, 1]:
-        for dx in [-1, 0, 1]:
-            if dx == dy == 0:
-                continue
-            nx, ny = x + dx, y + dy
-            if 0 <= nx < COLS and 0 <= ny < ROWS and grid[ny][nx] == -1:
-                count += 1
-    return count
-
-def reveal(x, y):
-    if not (0 <= x < COLS and 0 <= y < ROWS) or revealed[y][x]:
-        return
-    revealed[y][x] = True
-    if grid[y][x] == 0:
-        for dy in [-1, 0, 1]:
-            for dx in [-1, 0, 1]:
-                if dx == dy == 0:
-                    continue
-                reveal(x + dx, y + dy)
-
-def get_movable_mines():
-    if lock_flagged_mines:
-        return [(x, y) for y in range(ROWS) for x in range(COLS) if grid[y][x] == -1 and not flagged[y][x]]
-    else:
-        return [(x, y) for y in range(ROWS) for x in range(COLS) if grid[y][x] == -1]
-
-def get_safe_targets():
-    return [(x, y) for y in range(ROWS) for x in range(COLS) if not revealed[y][x] and not flagged[y][x] and grid[y][x] != -1]
-
-def move_mines():
-    movable = get_movable_mines()
-    if not movable:
-        return
-    targets = get_safe_targets()
-    if len(targets) < len(movable):
-        return
-    for mx, my in movable:
-        grid[my][mx] = 0
-    random.shuffle(targets)
-    for i in range(len(movable)):
-        tx, ty = targets[i]
-        grid[ty][tx] = -1
-    for y in range(ROWS):
-        for x in range(COLS):
-            if grid[y][x] != -1:
-                grid[y][x] = count_adjacent(x, y)
-
-def reveal_all_mines():
-    for y in range(ROWS):
-        for x in range(COLS):
-            if grid[y][x] == -1:
-                revealed[y][x] = True
-
-def check_win():
-    for y in range(ROWS):
-        for x in range(COLS):
-            if grid[y][x] != -1 and not revealed[y][x]:
-                return False
-    return True
-
-def get_remaining_mines():
-    flagged_count = sum(1 for y in range(ROWS) for x in range(COLS) if flagged[y][x])
-    return MINES - flagged_count
 
 running = True
 while running:
@@ -172,10 +62,11 @@ while running:
             mx, my = pygame.mouse.get_pos()
             x, y = mx // CELL_SIZE, my // CELL_SIZE
             if y >= ROWS:
-                if game_over:
+                if game.game_over:
                     replay_rect = pygame.Rect(WIDTH//2 - 100, HEIGHT - 70, 200, 40)
                     if replay_rect.collidepoint(mx, my):
-                        reset_game()
+                        game.reset(next_crazy_enabled, next_lock_flagged_mines)
+                        update_title()
                     crazy_rect = pygame.Rect(10, HEIGHT - 55, 200, 30)
                     if crazy_rect.collidepoint(mx, my):
                         next_crazy_enabled = not next_crazy_enabled
@@ -183,114 +74,76 @@ while running:
                     if lock_rect.collidepoint(mx, my):
                         next_lock_flagged_mines = not next_lock_flagged_mines
                 continue
-            if not game_over:
+            if not game.game_over:
                 if event.button == 1:
-                    if flagged[y][x]:
-                        continue
-                    if first_click:
-                        place_mines(x, y)
-                        for yy in range(ROWS):
-                            for xx in range(COLS):
-                                if grid[yy][xx] != -1:
-                                    grid[yy][xx] = count_adjacent(xx, yy)
-                        first_click = False
-                        start_time = pygame.time.get_ticks()
-                    click_count += 1
-                    if grid[y][x] == -1:
-                        reveal_all_mines()
-                        game_over = True
-                        final_time = (pygame.time.get_ticks() - start_time) // 1000 if start_time else 0
-                    else:
-                        reveal(x, y)
-                        if check_win():
-                            win = True
-                            game_over = True
-                            final_time = (pygame.time.get_ticks() - start_time) // 1000 if start_time else 0
-                    if crazy_enabled and click_count % 5 == 0 and not game_over:
-                        move_mines()
+                    game.handle_click(x, y, pygame.time.get_ticks())
                 elif event.button == 2:  # Middle mouse button - sonar ping
-                    if not first_click and not game_over and pings_remaining > 0:
-                        pings_remaining -= 1
-                        ping_active = True
-                        ping_start_time = pygame.time.get_ticks()
+                    game.handle_ping(pygame.time.get_ticks())
                 elif event.button == 3:
-                    if not revealed[y][x]:
-                        flagged[y][x] = not flagged[y][x]
+                    game.handle_flag(x, y)
 
-    if start_time is not None and not game_over:
-        elapsed = (pygame.time.get_ticks() - start_time) // 1000
-        if elapsed >= TIME_LIMIT:
-            reveal_all_mines()
-            game_over = True
-            win = False
-            final_time = TIME_LIMIT
-
-    # Check if ping has expired
-    if ping_active and (pygame.time.get_ticks() - ping_start_time) > PING_DURATION:
-        ping_active = False
+    # Update game state
+    game.update(pygame.time.get_ticks(), PING_DURATION)
 
     screen.fill((200, 200, 200))
     
     for y in range(ROWS):
         for x in range(COLS):
             rect = pygame.Rect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE)
-            if revealed[y][x]:
-                if grid[y][x] == -1:
-                    if flagged[y][x] and game_over:
+            if game.revealed[y][x]:
+                if game.grid[y][x] == -1:
+                    if game.flagged[y][x] and game.game_over:
                         pygame.draw.rect(screen, (0, 200, 0), rect)
                     else:
                         pygame.draw.rect(screen, (255, 0, 0), rect)
                     pygame.draw.circle(screen, (0, 0, 0), rect.center, 10)
-                    if flagged[y][x]:
+                    if game.flagged[y][x]:
                         pygame.draw.line(screen, (255, 255, 255), (x*CELL_SIZE+5, y*CELL_SIZE+5), (x*CELL_SIZE+25, y*CELL_SIZE+25), 4)
                         pygame.draw.line(screen, (255, 255, 255), (x*CELL_SIZE+5, y*CELL_SIZE+25), (x*CELL_SIZE+25, y*CELL_SIZE+5), 4)
                 else:
                     pygame.draw.rect(screen, (180, 180, 180), rect)
-                    if grid[y][x] > 0:
-                        color_index = min(grid[y][x] - 1, len(NUMBER_COLORS) - 1)
-                        text = font.render(str(grid[y][x]), True, NUMBER_COLORS[color_index])
+                    if game.grid[y][x] > 0:
+                        color_index = min(game.grid[y][x] - 1, len(NUMBER_COLORS) - 1)
+                        text = font.render(str(game.grid[y][x]), True, NUMBER_COLORS[color_index])
                         screen.blit(text, (x * CELL_SIZE + 10, y * CELL_SIZE + 5))
             else:
                 pygame.draw.rect(screen, (100, 100, 255), rect)
-                if flagged[y][x]:
+                if game.flagged[y][x]:
                     pygame.draw.polygon(screen, (255, 0, 0), [(x*CELL_SIZE+5, y*CELL_SIZE+10), (x*CELL_SIZE+15, y*CELL_SIZE+25), (x*CELL_SIZE+25, y*CELL_SIZE+10)])
                 # Show ghosted information during ping
-                if ping_active and not first_click:
-                    if grid[y][x] == -1:
+                if game.ping_active and not game.first_click:
+                    if game.grid[y][x] == -1:
                         # Ghost mine indicator
                         pygame.draw.circle(screen, (255, 255, 255, 128), rect.center, 8, 2)
-                    elif grid[y][x] > 0:
+                    elif game.grid[y][x] > 0:
                         # Ghost number
-                        color_index = min(grid[y][x] - 1, len(NUMBER_COLORS) - 1)
+                        color_index = min(game.grid[y][x] - 1, len(NUMBER_COLORS) - 1)
                         ghost_color = tuple(list(NUMBER_COLORS[color_index]) + [128])  # Add alpha
-                        ghost_text = font.render(str(grid[y][x]), True, (200, 200, 200))
+                        ghost_text = font.render(str(game.grid[y][x]), True, (200, 200, 200))
                         screen.blit(ghost_text, (x * CELL_SIZE + 10, y * CELL_SIZE + 5))
             pygame.draw.rect(screen, (0, 0, 0), rect, 1)
 
-    remaining = get_remaining_mines() if not first_click else MINES
+    remaining = game.get_remaining_mines() if not game.first_click else game.mines
     mines_text = small_font.render(f"Mines: {remaining}", True, (0, 0, 0))
     screen.blit(mines_text, (10, ROWS * CELL_SIZE + 10))
 
-    if start_time is not None:
-        elapsed = (pygame.time.get_ticks() - start_time) // 1000
-        time_left = max(0, TIME_LIMIT - elapsed)
+    if game.start_time is not None:
+        time_left = game.get_time_left(pygame.time.get_ticks())
         timer_text = small_font.render(f"Time: {time_left}", True, (255,0,0) if time_left < 30 else (0,0,0))
         screen.blit(timer_text, (WIDTH - timer_text.get_width() - 10, ROWS * CELL_SIZE + 10))
         
         # Display pings remaining
-        pings_text = small_font.render(f"Pings: {pings_remaining}", True, (0, 0, 0))
+        pings_text = small_font.render(f"Pings: {game.pings_remaining}", True, (0, 0, 0))
         screen.blit(pings_text, (WIDTH - pings_text.get_width() - 10, ROWS * CELL_SIZE + 35))
 
-    if crazy_enabled and not first_click and not game_over:
-        clicks_until = 5 - (click_count % 5)
-        if clicks_until == 5:
-            clicks_until = 0
-        shift_text = small_font.render(f"Shift in: {clicks_until}", True, (0, 0, 0))
+    clicks_until_shift = game.get_clicks_until_shift()
+    if clicks_until_shift > 0:
+        shift_text = small_font.render(f"Shift in: {clicks_until_shift}", True, (0, 0, 0))
         screen.blit(shift_text, (10, ROWS * CELL_SIZE + 40))
 
-    if game_over:
-        status = "WIN!" if win else ("TIME UP!" if final_time >= TIME_LIMIT else "BOOM!")
-        status_text = font.render(status, True, (0, 255, 0) if win else (255, 0, 0))
+    if game.game_over:
+        status = "WIN!" if game.win else ("TIME UP!" if game.final_time >= TIME_LIMIT else "BOOM!")
+        status_text = font.render(status, True, (0, 255, 0) if game.win else (255, 0, 0))
         screen.blit(status_text, (WIDTH//2 - status_text.get_width()//2, HEIGHT - 110))
 
         button_rect = pygame.Rect(WIDTH//2 - 100, HEIGHT - 70, 200, 40)
