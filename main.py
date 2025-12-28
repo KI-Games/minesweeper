@@ -51,6 +51,10 @@ next_crazy_enabled = CRAZY_MODE
 crazy_enabled = CRAZY_MODE
 next_lock_flagged_mines = LOCK_FLAGGED_MINES
 lock_flagged_mines = LOCK_FLAGGED_MINES
+pings_remaining = 3
+ping_active = False
+ping_start_time = 0
+PING_DURATION = 2000  # milliseconds
 
 # Color array for numbers 1-8 (move outside render loop for efficiency)
 NUMBER_COLORS = [(0,0,255), (0,128,0), (255,0,0), (128,0,128), (255,128,0), (0,255,255), (255,255,0), (128,128,128)]
@@ -64,7 +68,7 @@ def update_title():
 update_title()
 
 def reset_game():
-    global grid, revealed, flagged, click_count, first_click, game_over, win, start_time, crazy_enabled, lock_flagged_mines, final_time
+    global grid, revealed, flagged, click_count, first_click, game_over, win, start_time, crazy_enabled, lock_flagged_mines, final_time, pings_remaining, ping_active
     grid = [[0 for _ in range(COLS)] for _ in range(ROWS)]
     revealed = [[False] * COLS for _ in range(ROWS)]
     flagged = [[False] * COLS for _ in range(ROWS)]
@@ -76,6 +80,8 @@ def reset_game():
     final_time = 0
     crazy_enabled = next_crazy_enabled
     lock_flagged_mines = next_lock_flagged_mines
+    pings_remaining = 3
+    ping_active = False
     update_title()
 
 reset_game()
@@ -202,6 +208,11 @@ while running:
                             final_time = (pygame.time.get_ticks() - start_time) // 1000 if start_time else 0
                     if crazy_enabled and click_count % 5 == 0 and not game_over:
                         move_mines()
+                elif event.button == 2:  # Middle mouse button - sonar ping
+                    if not first_click and not game_over and pings_remaining > 0:
+                        pings_remaining -= 1
+                        ping_active = True
+                        ping_start_time = pygame.time.get_ticks()
                 elif event.button == 3:
                     if not revealed[y][x]:
                         flagged[y][x] = not flagged[y][x]
@@ -213,6 +224,10 @@ while running:
             game_over = True
             win = False
             final_time = TIME_LIMIT
+
+    # Check if ping has expired
+    if ping_active and (pygame.time.get_ticks() - ping_start_time) > PING_DURATION:
+        ping_active = False
 
     screen.fill((200, 200, 200))
     
@@ -239,6 +254,17 @@ while running:
                 pygame.draw.rect(screen, (100, 100, 255), rect)
                 if flagged[y][x]:
                     pygame.draw.polygon(screen, (255, 0, 0), [(x*CELL_SIZE+5, y*CELL_SIZE+10), (x*CELL_SIZE+15, y*CELL_SIZE+25), (x*CELL_SIZE+25, y*CELL_SIZE+10)])
+                # Show ghosted information during ping
+                if ping_active and not first_click:
+                    if grid[y][x] == -1:
+                        # Ghost mine indicator
+                        pygame.draw.circle(screen, (255, 255, 255, 128), rect.center, 8, 2)
+                    elif grid[y][x] > 0:
+                        # Ghost number
+                        color_index = min(grid[y][x] - 1, len(NUMBER_COLORS) - 1)
+                        ghost_color = tuple(list(NUMBER_COLORS[color_index]) + [128])  # Add alpha
+                        ghost_text = font.render(str(grid[y][x]), True, (200, 200, 200))
+                        screen.blit(ghost_text, (x * CELL_SIZE + 10, y * CELL_SIZE + 5))
             pygame.draw.rect(screen, (0, 0, 0), rect, 1)
 
     remaining = get_remaining_mines() if not first_click else MINES
@@ -250,6 +276,10 @@ while running:
         time_left = max(0, TIME_LIMIT - elapsed)
         timer_text = small_font.render(f"Time: {time_left}", True, (255,0,0) if time_left < 30 else (0,0,0))
         screen.blit(timer_text, (WIDTH - timer_text.get_width() - 10, ROWS * CELL_SIZE + 10))
+        
+        # Display pings remaining
+        pings_text = small_font.render(f"Pings: {pings_remaining}", True, (0, 0, 0))
+        screen.blit(pings_text, (WIDTH - pings_text.get_width() - 10, ROWS * CELL_SIZE + 35))
 
     if crazy_enabled and not first_click and not game_over:
         clicks_until = 5 - (click_count % 5)
